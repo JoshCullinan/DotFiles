@@ -1,0 +1,460 @@
+-- =============================================================================
+-- WezTerm Configuration
+-- =============================================================================
+
+local wezterm   = require 'wezterm'
+local config    = wezterm.config_builder()
+local act       = wezterm.action
+local nerdfonts = wezterm.nerdfonts
+
+-- Resolve a binary's absolute path via the login shell. WezTerm itself spawns
+-- processes with a minimal PATH that doesn't include Homebrew's bin directory,
+-- so Homebrew-installed tools (bat, glow, etc.) must be referenced by full
+-- path when passed to `args = {}` in a spawn action.
+local function which(name)
+  local ok, stdout = wezterm.run_child_process { '/bin/zsh', '-lc', 'command -v ' .. name }
+  if ok then return (stdout:gsub('%s+$', '')) end
+end
+
+local shortcuts_path = wezterm.home_dir .. '/.config/wezterm/shortcuts.md'
+local bat_path       = which 'bat'
+local shortcuts_args = bat_path
+    and { bat_path, '--paging=always', '--style=plain', shortcuts_path }
+    or  { '/usr/bin/less', shortcuts_path }
+
+-- =============================================================================
+-- Colour Scheme & Palette (Banana Blueberry)
+-- =============================================================================
+
+config.color_scheme = 'Catppuccin Mocha'
+
+-- Derive the palette directly from WezTerm's built-in scheme so the UI
+-- colours always stay in sync — no hardcoded hex values that can drift.
+local scheme  = wezterm.get_builtin_color_schemes()['Banana Blueberry']
+local c       = wezterm.color  -- colour manipulation helpers
+
+local palette = {
+  -- Base surfaces (darkened/lightened from the scheme background)
+  bg         = scheme.background,
+  bg_dark    = tostring(c.parse(scheme.background):darken(0.12)),
+  bg_hl      = tostring(c.parse(scheme.background):lighten(0.10)),
+
+  -- Text
+  fg         = scheme.foreground,
+  fg_dark    = scheme.brights[8],  -- bright white → dimmer body text
+
+  -- ANSI colours
+  black      = scheme.ansi[1],
+  red        = scheme.ansi[2],
+  green      = scheme.ansi[3],
+  yellow     = scheme.ansi[4],
+  blue       = scheme.ansi[5],
+  magenta    = scheme.ansi[6],
+  cyan       = scheme.ansi[7],
+  white      = scheme.ansi[8],
+
+  -- Bright variants (used for status bar accents)
+  br_black   = scheme.brights[1],
+  br_red     = scheme.brights[2],
+  br_green   = scheme.brights[3],
+  br_yellow  = scheme.brights[4],
+  br_blue    = scheme.brights[5],
+  br_magenta = scheme.brights[6],
+  br_cyan    = scheme.brights[7],
+  br_white   = scheme.brights[8],
+
+  -- Semantic aliases used in the UI below
+  comment    = scheme.brights[1],   -- bright black → muted/dim text
+  orange     = scheme.brights[4],   -- bright yellow → warm accent
+}
+
+-- =============================================================================
+-- Hyperlinks — Cmd+click to open URLs and file paths
+-- =============================================================================
+
+config.hyperlink_rules = wezterm.default_hyperlink_rules()
+
+-- =============================================================================
+-- Font & Appearance
+-- =============================================================================
+
+config.font = wezterm.font_with_fallback {
+  { family = 'JetBrainsMono Nerd Font', weight = 'Regular' },
+  { family = 'FiraCode Nerd Font',      weight = 'Regular' },
+  'Menlo',
+}
+config.font_size   = 13.5
+config.line_height = 1.2
+
+-- Ligatures — remove this block if you prefer no ligatures
+config.harfbuzz_features = { 'calt=1', 'clig=1', 'liga=1' }
+
+-- Window
+config.initial_cols               = 220
+config.initial_rows               = 50
+config.window_background_opacity  = 0.96
+config.macos_window_background_blur = 20
+config.window_padding             = { left = 12, right = 12, top = 10, bottom = 10 }
+config.window_decorations         = 'RESIZE'   -- removes title bar, keeps resize border
+config.window_close_confirmation  = 'AlwaysPrompt'
+
+-- Cursor
+config.default_cursor_style = 'BlinkingBar'
+config.cursor_blink_rate    = 500
+config.cursor_blink_ease_in  = 'Constant'
+config.cursor_blink_ease_out = 'Constant'
+
+-- =============================================================================
+-- Tab Bar
+-- =============================================================================
+
+config.enable_tab_bar         = true
+config.use_fancy_tab_bar      = false   -- retro tab bar; more customisable
+config.tab_bar_at_bottom      = false
+config.hide_tab_bar_if_only_one_tab = false
+config.tab_max_width          = 36
+config.show_new_tab_button_in_tab_bar = false
+
+-- Tab bar colour overrides derived from the Banana Blueberry palette
+config.colors = {
+  tab_bar = {
+    background = palette.bg_dark,
+
+    active_tab = {
+      bg_color  = palette.bg,
+      fg_color  = palette.blue,
+      intensity = 'Bold',
+    },
+    inactive_tab = {
+      bg_color  = palette.bg_dark,
+      fg_color  = palette.comment,
+    },
+    inactive_tab_hover = {
+      bg_color  = palette.bg_hl,
+      fg_color  = palette.fg_dark,
+    },
+    new_tab = {
+      bg_color = palette.bg_dark,
+      fg_color = palette.comment,
+    },
+    new_tab_hover = {
+      bg_color = palette.bg_hl,
+      fg_color = palette.fg,
+    },
+  },
+}
+
+-- Build a list of "powerline" status segments separated by half-circle glyphs.
+-- Each segment: { icon = nerdfont glyph, text = string, color = palette colour }
+-- Segments with empty text are skipped so missing data doesn't leave an
+-- orphaned badge.
+local function powerline_segments(segments, bg)
+  local out = {}
+  for _, seg in ipairs(segments) do
+    if seg.text and seg.text ~= '' then
+      table.insert(out, { Background = { Color = bg } })
+      table.insert(out, { Foreground = { Color = seg.color } })
+      table.insert(out, { Text = nerdfonts.ple_left_half_circle_thick })
+      table.insert(out, { Background = { Color = seg.color } })
+      table.insert(out, { Foreground = { Color = bg } })
+      table.insert(out, { Text = ' ' .. seg.icon .. ' ' })
+      table.insert(out, { Background = { Color = palette.black } })
+      table.insert(out, { Foreground = { Color = palette.fg } })
+      table.insert(out, { Text = ' ' .. seg.text .. ' ' })
+      table.insert(out, { Background = { Color = bg } })
+      table.insert(out, { Foreground = { Color = palette.black } })
+      table.insert(out, { Text = nerdfonts.ple_right_half_circle_thick .. ' ' })
+    end
+  end
+  return out
+end
+
+-- Status bar — workspace/key-table on left, cwd / user / host / time on right
+wezterm.on('update-status', function(window, pane)
+  -- Left: workspace name, or active key-table / leader indicator if either is
+  -- live. This way modal keybinds added later get a visible cue for free.
+  local stat = window:active_workspace()
+  local stat_color = palette.green
+  local active_table = window:active_key_table()
+  if active_table then
+    stat = active_table
+    stat_color = palette.yellow
+  elseif window:leader_is_active() then
+    stat = 'LEADER'
+    stat_color = palette.red
+  end
+
+  window:set_left_status(wezterm.format(powerline_segments({
+    { icon = nerdfonts.cod_terminal_tmux, text = stat, color = stat_color },
+  }, palette.bg_dark)))
+
+  -- Right: cwd (~ for home, truncated if very long), user, host, time
+  local cwd_uri = pane:get_current_working_dir()
+  local cwd = ''
+  if cwd_uri then
+    local path = cwd_uri.file_path or tostring(cwd_uri)
+    cwd = (path:gsub(os.getenv('HOME'), '~'))
+    if #cwd > 40 then cwd = '…' .. cwd:sub(-39) end
+  end
+
+  local host = (wezterm.hostname():match('^[^.]+') or ''):lower()
+
+  window:set_right_status(wezterm.format(powerline_segments({
+    { icon = nerdfonts.md_folder,         text = cwd,                                 color = palette.yellow  },
+    { icon = nerdfonts.fa_user,           text = os.getenv('USER') or '',             color = palette.magenta },
+    { icon = nerdfonts.cod_server,        text = host,                                color = palette.cyan    },
+    { icon = nerdfonts.md_calendar_clock, text = wezterm.strftime('%a %d %b %H:%M'),  color = palette.blue    },
+  }, palette.bg_dark)))
+end)
+
+-- Smart tab titles: detect the foreground command and prefix a Nerd Font icon.
+-- Inactive tabs with new output get a bell glyph; zoomed panes and copy mode
+-- get their own indicators.
+local function tab_display_title(tab)
+  local title = tab.tab_title
+  if not title or #title == 0 then
+    title = tab.active_pane.title
+  end
+  title = (title:gsub('^Copy mode: ', ''))
+  local max = config.tab_max_width - 6
+  if #title > max then
+    title = title:sub(1, max - 1) .. '…'
+  end
+  return title
+end
+
+wezterm.on('format-tab-title', function(tab)
+  local pane = tab.active_pane
+  local fg_proc = pane.foreground_process_name or ''
+  local command = fg_proc:match('([^/]+)$') or ''
+
+  local prefix = ''
+  if pane.title and pane.title:match('^Copy mode:') then
+    prefix = nerdfonts.md_content_copy .. ' '
+  elseif command == 'docker' or command == 'podman' then
+    prefix = nerdfonts.linux_docker .. ' '
+  elseif command == 'kubectl' or command == 'kind' or command == 'k9s' then
+    prefix = nerdfonts.md_kubernetes .. ' '
+  elseif command == 'ssh' or command == 'mosh' then
+    prefix = nerdfonts.md_remote_desktop .. ' '
+  elseif command:match('^h?top$') or command == 'btop' then
+    prefix = nerdfonts.md_monitor_eye .. ' '
+  elseif command:match('^n?vim?$') then
+    prefix = nerdfonts.dev_vim .. ' '
+  elseif command == 'watch' then
+    prefix = nerdfonts.md_eye_outline .. ' '
+  elseif command == 'git' then
+    prefix = nerdfonts.dev_git .. ' '
+  elseif tab.is_active then
+    prefix = nerdfonts.dev_terminal .. ' '
+  end
+
+  if pane.is_zoomed then
+    prefix = nerdfonts.cod_zoom_in .. ' ' .. prefix
+  end
+
+  if not tab.is_active then
+    for _, p in ipairs(tab.panes) do
+      if p.has_unseen_output then
+        prefix = nerdfonts.md_bell_ring_outline .. ' ' .. prefix
+        break
+      end
+    end
+  end
+
+  local title  = ' ' .. prefix .. tab_display_title(tab) .. ' '
+  local number = ' ' .. tostring(tab.tab_index + 1) .. ' '
+
+  if tab.is_active then
+    return {
+      { Attribute  = { Intensity = 'Bold' } },
+      { Background = { Color = palette.bg } },
+      { Foreground = { Color = palette.blue } },
+      { Text = title },
+      { Background = { Color = palette.blue } },
+      { Foreground = { Color = palette.bg } },
+      { Text = number },
+      { Background = { Color = palette.bg_dark } },
+      { Foreground = { Color = palette.blue } },
+      { Text = nerdfonts.ple_right_half_circle_thick },
+    }
+  end
+
+  return {
+    { Background = { Color = palette.bg_dark } },
+    { Foreground = { Color = palette.comment } },
+    { Text = title },
+    { Background = { Color = palette.comment } },
+    { Foreground = { Color = palette.bg_dark } },
+    { Text = number },
+    { Background = { Color = palette.bg_dark } },
+    { Foreground = { Color = palette.comment } },
+    { Text = nerdfonts.ple_right_half_circle_thick },
+  }
+end)
+
+-- Window focus dimming: when the window loses focus, swap the two HSBs so
+-- every pane dims (not just the inactive ones).
+wezterm.on('window-focus-changed', function(window)
+  local overrides = window:get_config_overrides() or {}
+  if window:is_focused() then
+    overrides.foreground_text_hsb = config.foreground_text_hsb
+    overrides.inactive_pane_hsb   = config.inactive_pane_hsb
+  else
+    overrides.foreground_text_hsb = config.inactive_pane_hsb
+    overrides.inactive_pane_hsb   = config.foreground_text_hsb
+  end
+  window:set_config_overrides(overrides)
+end)
+
+-- =============================================================================
+-- Window Focus & Pane Dimming
+-- =============================================================================
+
+-- Inactive panes dim. The 'window-focus-changed' handler below swaps these
+-- two HSBs on focus loss so the entire window dims uniformly when WezTerm
+-- isn't the frontmost app.
+config.inactive_pane_hsb   = { brightness = 0.6, hue = 1.0, saturation = 0.6 }
+config.foreground_text_hsb = { brightness = 1.0, hue = 1.0, saturation = 1.0 }
+
+-- =============================================================================
+-- Performance & Behaviour
+-- =============================================================================
+
+config.front_end         = 'WebGpu'           -- best GPU-accelerated renderer on macOS
+config.webgpu_power_preference = 'HighPerformance'
+config.scrollback_lines  = 10000
+config.audible_bell      = 'Disabled'
+config.visual_bell       = {
+  fade_in_duration_ms  = 75,
+  fade_out_duration_ms = 75,
+  target               = 'CursorColor',
+}
+config.check_for_updates           = false  -- manage updates yourself
+config.automatically_reload_config = true   -- hot-reload this file on save
+config.enable_scroll_bar           = false
+config.hide_mouse_cursor_when_typing = true
+config.animation_fps               = 60
+config.max_fps                     = 60
+
+-- =============================================================================
+-- Keybindings — Cmd-based, Mac-native
+-- =============================================================================
+
+config.keys = {
+
+  -- ── Pane splitting (mirrors iTerm2) ───────────────────────────────────────
+  { key = 'd', mods = 'CMD',       action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
+  { key = 'd', mods = 'CMD|SHIFT', action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
+
+  -- ── Pane navigation — Cmd+Option+Arrow ────────────────────────────────────
+  { key = 'LeftArrow',  mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Left'  },
+  { key = 'RightArrow', mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Right' },
+  { key = 'UpArrow',    mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Up'    },
+  { key = 'DownArrow',  mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Down'  },
+
+  -- ── Pane resizing — Cmd+Ctrl+Arrow ────────────────────────────────────────
+  { key = 'LeftArrow',  mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Left',  5 } },
+  { key = 'RightArrow', mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Right', 5 } },
+  { key = 'UpArrow',    mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Up',    5 } },
+  { key = 'DownArrow',  mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Down',  5 } },
+
+  -- ── Zoom current pane ─────────────────────────────────────────────────────
+  { key = 'z', mods = 'CMD|SHIFT', action = act.TogglePaneZoomState },
+
+  -- ── Close current pane ────────────────────────────────────────────────────
+  { key = 'w', mods = 'CMD', action = act.CloseCurrentPane { confirm = true } },
+
+  -- ── Tabs ──────────────────────────────────────────────────────────────────
+  { key = 't',          mods = 'CMD',       action = act.SpawnTab 'CurrentPaneDomain' },
+  { key = ']',          mods = 'CMD|SHIFT', action = act.ActivateTabRelative(1)       },
+  { key = '[',          mods = 'CMD|SHIFT', action = act.ActivateTabRelative(-1)      },
+
+  -- Rename current tab
+  {
+    key = 'r', mods = 'CMD|SHIFT',
+    action = act.PromptInputLine {
+      description = 'Rename tab:',
+      action = wezterm.action_callback(function(window, _, line)
+        if line then window:active_tab():set_title(line) end
+      end),
+    },
+  },
+
+  -- ── Font size ─────────────────────────────────────────────────────────────
+  { key = '=', mods = 'CMD', action = act.IncreaseFontSize },
+  { key = '-', mods = 'CMD', action = act.DecreaseFontSize },
+  { key = '0', mods = 'CMD', action = act.ResetFontSize    },
+
+  -- ── Search scrollback ─────────────────────────────────────────────────────
+  { key = 'f', mods = 'CMD', action = act.Search { CaseInSensitiveString = '' } },
+
+  -- ── Quick select — grab URLs, paths, IPs ──────────────────────────────────
+  { key = 'Space', mods = 'CMD|SHIFT', action = act.QuickSelect },
+
+  -- ── Toggle fullscreen ─────────────────────────────────────────────────────
+  { key = 'f', mods = 'CMD|CTRL', action = act.ToggleFullScreen },
+
+  -- ── Open this config in VS Code ───────────────────────────────────────────
+  {
+    key = ',', mods = 'CMD',
+    action = act.SpawnCommandInNewTab { args = { 'code', wezterm.config_file } },
+  },
+
+  -- ── Show shortcuts cheat sheet — q to dismiss ─────────────────────────────
+  -- Spawns a small separate WezTerm window (popup-like) running bat on the
+  -- shortcuts file. Closes itself when bat exits on `q`.
+  {
+    key = 'h', mods = 'CMD|SHIFT',
+    action = wezterm.action_callback(function()
+      local _, _, mux_win = wezterm.mux.spawn_window { args = shortcuts_args }
+      -- gui_window() can return nil immediately after spawn (the GUI window
+      -- isn't attached yet). If so, the window opens at the default size and
+      -- the user can resize manually.
+      local gui = mux_win:gui_window()
+      if gui then
+        gui:set_inner_size(1440, 1080)
+      end
+    end),
+  },
+
+  -- ── Reload config ─────────────────────────────────────────────────────────
+  { key = 'r', mods = 'CMD|CTRL', action = act.ReloadConfiguration },
+}
+
+-- Jump to tab by number: Cmd+1 through Cmd+9
+for i = 1, 9 do
+  table.insert(config.keys, {
+    key    = tostring(i),
+    mods   = 'CMD',
+    action = act.ActivateTab(i - 1),
+  })
+end
+
+-- =============================================================================
+-- Search Mode — overrides default search_mode key table
+-- =============================================================================
+-- Key tables fully replace defaults when redefined, so the block below
+-- restates WezTerm's defaults and *adds* Cmd+G / Cmd+Shift+G for Mac-native
+-- Find Next / Find Previous (the convention Safari, Chrome, Finder use).
+config.key_tables = {
+  search_mode = {
+    { key = 'Escape',    mods = 'NONE',      action = act.CopyMode 'Close' },
+    { key = 'Enter',     mods = 'NONE',      action = act.CopyMode 'PriorMatch' },
+    { key = 'n',         mods = 'CTRL',      action = act.CopyMode 'NextMatch' },
+    { key = 'p',         mods = 'CTRL',      action = act.CopyMode 'PriorMatch' },
+    { key = 'r',         mods = 'CTRL',      action = act.CopyMode 'CycleMatchType' },
+    { key = 'u',         mods = 'CTRL',      action = act.CopyMode 'ClearPattern' },
+    { key = 'PageUp',    mods = 'NONE',      action = act.CopyMode 'PriorMatchPage' },
+    { key = 'PageDown',  mods = 'NONE',      action = act.CopyMode 'NextMatchPage' },
+    { key = 'UpArrow',   mods = 'NONE',      action = act.CopyMode 'PriorMatch' },
+    { key = 'DownArrow', mods = 'NONE',      action = act.CopyMode 'NextMatch' },
+    -- Mac-native additions
+    { key = 'g',         mods = 'CMD',       action = act.CopyMode 'NextMatch' },
+    { key = 'g',         mods = 'CMD|SHIFT', action = act.CopyMode 'PriorMatch' },
+  },
+}
+
+-- =============================================================================
+
+return config
