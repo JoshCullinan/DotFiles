@@ -74,7 +74,11 @@ plugins=(git rust python pyenv pylint history autojump colored-man-pages extract
 
 source $ZSH/oh-my-zsh.sh
 
+{{- if eq .chezmoi.os "darwin" }}
 [ -f /opt/homebrew/etc/profile.d/autojump.sh ] && . /opt/homebrew/etc/profile.d/autojump.sh
+{{- else if eq .chezmoi.os "linux" }}
+[ -f /usr/share/autojump/autojump.sh ] && . /usr/share/autojump/autojump.sh
+{{- end }}
 
 # User configuration
 

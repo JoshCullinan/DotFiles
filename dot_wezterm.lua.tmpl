@@ -7,12 +7,21 @@ local config    = wezterm.config_builder()
 local act       = wezterm.action
 local nerdfonts = wezterm.nerdfonts
 
--- Resolve a binary's absolute path via the login shell. WezTerm itself spawns
--- processes with a minimal PATH that doesn't include Homebrew's bin directory,
--- so Homebrew-installed tools (bat, glow, etc.) must be referenced by full
--- path when passed to `args = {}` in a spawn action.
+-- Primary keybinding modifier — CMD on macOS, SUPER (Windows/Meta key) on
+-- Linux. WezTerm treats CMD/SUPER/WIN as aliases internally, so changing this
+-- one value flips every binding below to match the host OS conventions.
+local mod       = '{{ if eq .chezmoi.os "darwin" }}CMD{{ else }}SUPER{{ end }}'
+local mod_shift = mod .. '|SHIFT'
+local mod_opt   = mod .. '|OPT'
+local mod_ctrl  = mod .. '|CTRL'
+
+-- Resolve a binary's absolute path via the login shell. WezTerm spawns
+-- processes with a minimal PATH that excludes package-manager bin dirs
+-- (Homebrew on macOS, ~/.local/bin on Linux), so installed tools must be
+-- referenced by full path when passed to `args = {}` in a spawn action.
 local function which(name)
-  local ok, stdout = wezterm.run_child_process { '/bin/zsh', '-lc', 'command -v ' .. name }
+  local shell = os.getenv('SHELL') or '/bin/sh'
+  local ok, stdout = wezterm.run_child_process { shell, '-lc', 'command -v ' .. name }
   if ok then return (stdout:gsub('%s+$', '')) end
 end
 
@@ -93,7 +102,9 @@ config.harfbuzz_features = { 'calt=1', 'clig=1', 'liga=1' }
 config.initial_cols               = 220
 config.initial_rows               = 50
 config.window_background_opacity  = 0.96
+{{- if eq .chezmoi.os "darwin" }}
 config.macos_window_background_blur = 20
+{{- end }}
 config.window_padding             = { left = 12, right = 12, top = 10, bottom = 10 }
 config.window_decorations         = 'RESIZE'   -- removes title bar, keeps resize border
 config.window_close_confirmation  = 'AlwaysPrompt'
@@ -344,35 +355,35 @@ config.max_fps                     = 60
 config.keys = {
 
   -- ── Pane splitting (mirrors iTerm2) ───────────────────────────────────────
-  { key = 'd', mods = 'CMD',       action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
-  { key = 'd', mods = 'CMD|SHIFT', action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
+  { key = 'd', mods = mod,       action = act.SplitHorizontal { domain = 'CurrentPaneDomain' } },
+  { key = 'd', mods = mod_shift, action = act.SplitVertical   { domain = 'CurrentPaneDomain' } },
 
-  -- ── Pane navigation — Cmd+Option+Arrow ────────────────────────────────────
-  { key = 'LeftArrow',  mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Left'  },
-  { key = 'RightArrow', mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Right' },
-  { key = 'UpArrow',    mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Up'    },
-  { key = 'DownArrow',  mods = 'CMD|OPT', action = act.ActivatePaneDirection 'Down'  },
+  -- ── Pane navigation — primary + Option/Alt + Arrow ────────────────────────
+  { key = 'LeftArrow',  mods = mod_opt, action = act.ActivatePaneDirection 'Left'  },
+  { key = 'RightArrow', mods = mod_opt, action = act.ActivatePaneDirection 'Right' },
+  { key = 'UpArrow',    mods = mod_opt, action = act.ActivatePaneDirection 'Up'    },
+  { key = 'DownArrow',  mods = mod_opt, action = act.ActivatePaneDirection 'Down'  },
 
-  -- ── Pane resizing — Cmd+Ctrl+Arrow ────────────────────────────────────────
-  { key = 'LeftArrow',  mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Left',  5 } },
-  { key = 'RightArrow', mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Right', 5 } },
-  { key = 'UpArrow',    mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Up',    5 } },
-  { key = 'DownArrow',  mods = 'CMD|CTRL', action = act.AdjustPaneSize { 'Down',  5 } },
+  -- ── Pane resizing — primary + Ctrl + Arrow ────────────────────────────────
+  { key = 'LeftArrow',  mods = mod_ctrl, action = act.AdjustPaneSize { 'Left',  5 } },
+  { key = 'RightArrow', mods = mod_ctrl, action = act.AdjustPaneSize { 'Right', 5 } },
+  { key = 'UpArrow',    mods = mod_ctrl, action = act.AdjustPaneSize { 'Up',    5 } },
+  { key = 'DownArrow',  mods = mod_ctrl, action = act.AdjustPaneSize { 'Down',  5 } },
 
   -- ── Zoom current pane ─────────────────────────────────────────────────────
-  { key = 'z', mods = 'CMD|SHIFT', action = act.TogglePaneZoomState },
+  { key = 'z', mods = mod_shift, action = act.TogglePaneZoomState },
 
   -- ── Close current pane ────────────────────────────────────────────────────
-  { key = 'w', mods = 'CMD', action = act.CloseCurrentPane { confirm = true } },
+  { key = 'w', mods = mod, action = act.CloseCurrentPane { confirm = true } },
 
   -- ── Tabs ──────────────────────────────────────────────────────────────────
-  { key = 't',          mods = 'CMD',       action = act.SpawnTab 'CurrentPaneDomain' },
-  { key = ']',          mods = 'CMD|SHIFT', action = act.ActivateTabRelative(1)       },
-  { key = '[',          mods = 'CMD|SHIFT', action = act.ActivateTabRelative(-1)      },
+  { key = 't',          mods = mod,       action = act.SpawnTab 'CurrentPaneDomain' },
+  { key = ']',          mods = mod_shift, action = act.ActivateTabRelative(1)       },
+  { key = '[',          mods = mod_shift, action = act.ActivateTabRelative(-1)      },
 
   -- Rename current tab
   {
-    key = 'r', mods = 'CMD|SHIFT',
+    key = 'r', mods = mod_shift,
     action = act.PromptInputLine {
       description = 'Rename tab:',
       action = wezterm.action_callback(function(window, _, line)
@@ -382,22 +393,22 @@ config.keys = {
   },
 
   -- ── Font size ─────────────────────────────────────────────────────────────
-  { key = '=', mods = 'CMD', action = act.IncreaseFontSize },
-  { key = '-', mods = 'CMD', action = act.DecreaseFontSize },
-  { key = '0', mods = 'CMD', action = act.ResetFontSize    },
+  { key = '=', mods = mod, action = act.IncreaseFontSize },
+  { key = '-', mods = mod, action = act.DecreaseFontSize },
+  { key = '0', mods = mod, action = act.ResetFontSize    },
 
   -- ── Search scrollback ─────────────────────────────────────────────────────
-  { key = 'f', mods = 'CMD', action = act.Search { CaseInSensitiveString = '' } },
+  { key = 'f', mods = mod, action = act.Search { CaseInSensitiveString = '' } },
 
   -- ── Quick select — grab URLs, paths, IPs ──────────────────────────────────
-  { key = 'Space', mods = 'CMD|SHIFT', action = act.QuickSelect },
+  { key = 'Space', mods = mod_shift, action = act.QuickSelect },
 
   -- ── Toggle fullscreen ─────────────────────────────────────────────────────
-  { key = 'f', mods = 'CMD|CTRL', action = act.ToggleFullScreen },
+  { key = 'f', mods = mod_ctrl, action = act.ToggleFullScreen },
 
   -- ── Open this config in VS Code ───────────────────────────────────────────
   {
-    key = ',', mods = 'CMD',
+    key = ',', mods = mod,
     action = act.SpawnCommandInNewTab { args = { 'code', wezterm.config_file } },
   },
 
@@ -405,7 +416,7 @@ config.keys = {
   -- Spawns a small separate WezTerm window (popup-like) running bat on the
   -- shortcuts file. Closes itself when bat exits on `q`.
   {
-    key = 'h', mods = 'CMD|SHIFT',
+    key = 'h', mods = mod_shift,
     action = wezterm.action_callback(function()
       local _, _, mux_win = wezterm.mux.spawn_window { args = shortcuts_args }
       -- gui_window() can return nil immediately after spawn (the GUI window
@@ -419,14 +430,14 @@ config.keys = {
   },
 
   -- ── Reload config ─────────────────────────────────────────────────────────
-  { key = 'r', mods = 'CMD|CTRL', action = act.ReloadConfiguration },
+  { key = 'r', mods = mod_ctrl, action = act.ReloadConfiguration },
 }
 
--- Jump to tab by number: Cmd+1 through Cmd+9
+-- Jump to tab by number: primary mod + 1 through 9
 for i = 1, 9 do
   table.insert(config.keys, {
     key    = tostring(i),
-    mods   = 'CMD',
+    mods   = mod,
     action = act.ActivateTab(i - 1),
   })
 end
@@ -435,23 +446,24 @@ end
 -- Search Mode — overrides default search_mode key table
 -- =============================================================================
 -- Key tables fully replace defaults when redefined, so the block below
--- restates WezTerm's defaults and *adds* Cmd+G / Cmd+Shift+G for Mac-native
--- Find Next / Find Previous (the convention Safari, Chrome, Finder use).
+-- restates WezTerm's defaults and *adds* primary+G / primary+Shift+G for
+-- Find Next / Find Previous (the convention Safari/Chrome/Finder use on
+-- macOS, and equivalent SUPER bindings on Linux).
 config.key_tables = {
   search_mode = {
-    { key = 'Escape',    mods = 'NONE',      action = act.CopyMode 'Close' },
-    { key = 'Enter',     mods = 'NONE',      action = act.CopyMode 'PriorMatch' },
-    { key = 'n',         mods = 'CTRL',      action = act.CopyMode 'NextMatch' },
-    { key = 'p',         mods = 'CTRL',      action = act.CopyMode 'PriorMatch' },
-    { key = 'r',         mods = 'CTRL',      action = act.CopyMode 'CycleMatchType' },
-    { key = 'u',         mods = 'CTRL',      action = act.CopyMode 'ClearPattern' },
-    { key = 'PageUp',    mods = 'NONE',      action = act.CopyMode 'PriorMatchPage' },
-    { key = 'PageDown',  mods = 'NONE',      action = act.CopyMode 'NextMatchPage' },
-    { key = 'UpArrow',   mods = 'NONE',      action = act.CopyMode 'PriorMatch' },
-    { key = 'DownArrow', mods = 'NONE',      action = act.CopyMode 'NextMatch' },
-    -- Mac-native additions
-    { key = 'g',         mods = 'CMD',       action = act.CopyMode 'NextMatch' },
-    { key = 'g',         mods = 'CMD|SHIFT', action = act.CopyMode 'PriorMatch' },
+    { key = 'Escape',    mods = 'NONE',  action = act.CopyMode 'Close' },
+    { key = 'Enter',     mods = 'NONE',  action = act.CopyMode 'PriorMatch' },
+    { key = 'n',         mods = 'CTRL',  action = act.CopyMode 'NextMatch' },
+    { key = 'p',         mods = 'CTRL',  action = act.CopyMode 'PriorMatch' },
+    { key = 'r',         mods = 'CTRL',  action = act.CopyMode 'CycleMatchType' },
+    { key = 'u',         mods = 'CTRL',  action = act.CopyMode 'ClearPattern' },
+    { key = 'PageUp',    mods = 'NONE',  action = act.CopyMode 'PriorMatchPage' },
+    { key = 'PageDown',  mods = 'NONE',  action = act.CopyMode 'NextMatchPage' },
+    { key = 'UpArrow',   mods = 'NONE',  action = act.CopyMode 'PriorMatch' },
+    { key = 'DownArrow', mods = 'NONE',  action = act.CopyMode 'NextMatch' },
+    -- Native-feel find next/previous
+    { key = 'g',         mods = mod,        action = act.CopyMode 'NextMatch' },
+    { key = 'g',         mods = mod_shift,  action = act.CopyMode 'PriorMatch' },
   },
 }
 
