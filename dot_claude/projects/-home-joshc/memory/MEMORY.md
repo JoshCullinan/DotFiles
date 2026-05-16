@@ -1,0 +1,2 @@
+- [WezTerm glyph clipping on Linux](wezterm-glyph-clipping.md) — Linux box clips glyphs below 14pt; rule-outs exhausted, don't re-bisect.
+- [GNOME compositor-grabbed keybindings](gnome-keybinding-grabs.md) — chords GNOME intercepts before apps see them on user's Linux box; avoid for Linux app keymaps.
