@@ -1,0 +1,67 @@
+{{- $mod        := "Ctrl+Shift"     -}}
+{{- $mod_shift  := "Ctrl+Shift+Alt" -}}
+{{- $mod_opt    := "Alt"            -}}
+{{- $mod_ctrl   := "Ctrl+Alt"       -}}
+{{- $mod_resize := "Ctrl+Shift"     -}}
+{{- if eq .chezmoi.os "darwin" -}}
+{{-   $mod         = "Cmd"       -}}
+{{-   $mod_shift   = "Cmd+Shift"  -}}
+{{-   $mod_opt     = "Cmd+Opt"    -}}
+{{-   $mod_ctrl    = "Cmd+Ctrl"   -}}
+{{-   $mod_resize  = "Cmd+Ctrl"   -}}
+{{- end }}
+# WezTerm shortcuts ({{ .chezmoi.os }})
+
+Press `q` to close this window.
+
+## Panes
+| Action                | Shortcut |
+| --------------------- | -------- |
+| Split horizontal      | `{{ $mod }}+D` |
+| Split vertical        | `{{ $mod_shift }}+D` |
+| Close pane            | `{{ $mod }}+W` |
+| Zoom pane             | `{{ $mod_shift }}+Z` |
+| Navigate (←↑↓→)       | `{{ $mod_opt }}+Arrow` |
+| Resize (±5 cells)     | `{{ $mod_resize }}+Arrow` |
+
+## Tabs
+| Action                | Shortcut |
+| --------------------- | -------- |
+| New tab               | `{{ $mod }}+T` |
+| Jump to tab N         | `{{ $mod }}+1` .. `{{ $mod }}+9` |
+{{- if eq .chezmoi.os "darwin" }}
+| Next tab              | `{{ $mod_shift }}+]` |
+| Prev tab              | `{{ $mod_shift }}+[` |
+{{- else }}
+| Next tab              | `Ctrl+Tab`  ·  `Ctrl+PageDown` |
+| Prev tab              | `Ctrl+Shift+Tab`  ·  `Ctrl+PageUp` |
+{{- end }}
+| Rename tab            | `{{ $mod_shift }}+R` |
+
+## Font size
+| Action                | Shortcut |
+| --------------------- | -------- |
+| Increase              | `{{ $mod }}+=` |
+| Decrease              | `{{ $mod }}+-` |
+| Reset                 | `{{ $mod }}+0` |
+
+## Search & selection
+| Action                | Shortcut |
+| --------------------- | -------- |
+| Search scrollback     | `{{ $mod }}+F` |
+| Next match            | `{{ $mod }}+G`  (in search) |
+| Prev match            | `{{ $mod_shift }}+G`  (in search) |
+| Quick select          | `{{ $mod_shift }}+Space` |
+
+## Window & system
+| Action                | Shortcut |
+| --------------------- | -------- |
+| Toggle fullscreen     | `{{ $mod_ctrl }}+F` |
+| Reload config         | `{{ $mod_ctrl }}+R`  (or just save the file) |
+| Open this config      | `{{ $mod }}+,` |
+| Show this help        | `{{ $mod_shift }}+H` |
+
+## Shell input
+| Action                | Shortcut |
+| --------------------- | -------- |
+| Delete previous word  | `Ctrl+Backspace`  (sent as Ctrl+W to readline) |

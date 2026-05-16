@@ -7,13 +7,37 @@ local config    = wezterm.config_builder()
 local act       = wezterm.action
 local nerdfonts = wezterm.nerdfonts
 
--- Primary keybinding modifier — CMD on macOS, SUPER (Windows/Meta key) on
--- Linux. WezTerm treats CMD/SUPER/WIN as aliases internally, so changing this
--- one value flips every binding below to match the host OS conventions.
-local mod       = '{{ if eq .chezmoi.os "darwin" }}CMD{{ else }}SUPER{{ end }}'
-local mod_shift = mod .. '|SHIFT'
-local mod_opt   = mod .. '|OPT'
-local mod_ctrl  = mod .. '|CTRL'
+-- Keybinding modifier scheme — per-OS so each platform feels native:
+--
+--   macOS         Linux           Used for
+--   ────────      ────────────    ─────────────────────────────────────────
+--   CMD           CTRL+SHIFT      "primary" — tabs, splits, search, font…
+--   CMD+SHIFT     CTRL+SHIFT+ALT  shift-variants (vsplit, prev tab, zoom…)
+--   CMD+OPT       ALT             pane navigation (arrows)
+--   CMD+CTRL      CTRL+ALT        fullscreen / reload
+--   CMD+CTRL      CTRL+SHIFT      pane resize (split out because Ctrl+Alt
+--                                 +Arrow and Ctrl+Shift+Alt+Arrow are both
+--                                 GNOME workspace chords on this box; the
+--                                 Linux mapping is just `mod+Arrow`, which
+--                                 parallels `mod_opt+Arrow` for pane nav)
+--
+-- The Linux scheme matches gnome-terminal / WezTerm's own Linux defaults
+-- and avoids GNOME's Super-key shortcuts (Super+1..9 workspace switch,
+-- Super+Arrow tiling, Super+D show-desktop, etc.) which the compositor
+-- intercepts before WezTerm sees them.
+{{- if eq .chezmoi.os "darwin" }}
+local mod        = 'CMD'
+local mod_shift  = 'CMD|SHIFT'
+local mod_opt    = 'CMD|OPT'
+local mod_ctrl   = 'CMD|CTRL'
+local mod_resize = 'CMD|CTRL'
+{{- else }}
+local mod        = 'CTRL|SHIFT'
+local mod_shift  = 'CTRL|SHIFT|ALT'
+local mod_opt    = 'ALT'
+local mod_ctrl   = 'CTRL|ALT'
+local mod_resize = 'CTRL|SHIFT'
+{{- end }}
 
 -- Resolve a binary's absolute path via the login shell. WezTerm spawns
 -- processes with a minimal PATH that excludes package-manager bin dirs
@@ -26,10 +50,21 @@ local function which(name)
 end
 
 local shortcuts_path = wezterm.home_dir .. '/.config/wezterm/shortcuts.md'
-local bat_path       = which 'bat'
+-- bat is named `bat` on macOS (brew) and `batcat` on Debian/Ubuntu — try both.
+local bat_path       = which 'bat' or which 'batcat'
 local shortcuts_args = bat_path
-    and { bat_path, '--paging=always', '--style=plain', shortcuts_path }
+    and { bat_path, '--paging=always', '--style=plain', '--language=md', shortcuts_path }
     or  { '/usr/bin/less', shortcuts_path }
+
+-- VS Code launcher. Resolved at startup because WezTerm's minimal PATH
+-- (see `which` above) won't find `code` in ~/.local/bin, /snap/bin, or
+-- /Applications. Falls back to the conventional install path per OS.
+local code_path = which 'code'
+    or {{ if eq .chezmoi.os "darwin" -}}
+    '/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code'
+    {{- else -}}
+    '/usr/bin/code'
+    {{- end }}
 
 -- =============================================================================
 -- Colour Scheme & Palette (Banana Blueberry)
@@ -90,7 +125,12 @@ config.hyperlink_rules = wezterm.default_hyperlink_rules()
 config.font = wezterm.font_with_fallback {
   { family = 'JetBrainsMono Nerd Font', weight = 'Regular' },
   { family = 'FiraCode Nerd Font',      weight = 'Regular' },
+{{- if eq .chezmoi.os "darwin" }}
   'Menlo',
+{{- else }}
+  'DejaVu Sans Mono',
+  'monospace',
+{{- end }}
 }
 -- font_size: Linux clips glyph descenders/ascenders at smaller sizes — the
 -- bitmap itself is rasterised clipped on this freetype/GPU pipeline, so
@@ -110,7 +150,15 @@ config.window_background_opacity  = 0.96
 config.macos_window_background_blur = 20
 {{- end }}
 config.window_padding             = { left = 12, right = 12, top = 10, bottom = 10 }
-config.window_decorations         = 'RESIZE'   -- removes title bar, keeps resize border
+-- macOS: drop the title bar for a clean look (the traffic-light buttons are
+-- still drawn by the OS on the corner). Linux/Wayland: keep TITLE so the
+-- compositor draws a titlebar with drag/close affordances — without it on
+-- GNOME there's no easy way to move the window with the mouse.
+{{- if eq .chezmoi.os "darwin" }}
+config.window_decorations         = 'RESIZE'
+{{- else }}
+config.window_decorations         = 'TITLE | RESIZE'
+{{- end }}
 config.window_close_confirmation  = 'AlwaysPrompt'
 
 -- Cursor
@@ -336,8 +384,14 @@ config.foreground_text_hsb = { brightness = 1.0, hue = 1.0, saturation = 1.0 }
 -- Performance & Behaviour
 -- =============================================================================
 
-config.front_end         = 'WebGpu'           -- best GPU-accelerated renderer on macOS
+-- GPU-accelerated renderer. WebGpu is the modern path on both macOS (Metal)
+-- and Linux (Vulkan). `webgpu_power_preference` selects the discrete adapter
+-- on hybrid-GPU Macs; it's a no-op on single-GPU Linux desktops and can hurt
+-- battery on Linux laptops with hybrid graphics, so it's macOS-only.
+config.front_end = 'WebGpu'
+{{- if eq .chezmoi.os "darwin" }}
 config.webgpu_power_preference = 'HighPerformance'
+{{- end }}
 config.scrollback_lines  = 10000
 config.audible_bell      = 'Disabled'
 config.visual_bell       = {
@@ -345,7 +399,7 @@ config.visual_bell       = {
   fade_out_duration_ms = 75,
   target               = 'CursorColor',
 }
-config.check_for_updates           = false  -- manage updates yourself
+config.check_for_updates           = true
 config.automatically_reload_config = true   -- hot-reload this file on save
 config.enable_scroll_bar           = false
 config.hide_mouse_cursor_when_typing = true
@@ -353,7 +407,7 @@ config.animation_fps               = 60
 config.max_fps                     = 60
 
 -- =============================================================================
--- Keybindings — Cmd-based, Mac-native
+-- Keybindings — primary chord is OS-native (see mod definition above)
 -- =============================================================================
 
 config.keys = {
@@ -368,11 +422,11 @@ config.keys = {
   { key = 'UpArrow',    mods = mod_opt, action = act.ActivatePaneDirection 'Up'    },
   { key = 'DownArrow',  mods = mod_opt, action = act.ActivatePaneDirection 'Down'  },
 
-  -- ── Pane resizing — primary + Ctrl + Arrow ────────────────────────────────
-  { key = 'LeftArrow',  mods = mod_ctrl, action = act.AdjustPaneSize { 'Left',  5 } },
-  { key = 'RightArrow', mods = mod_ctrl, action = act.AdjustPaneSize { 'Right', 5 } },
-  { key = 'UpArrow',    mods = mod_ctrl, action = act.AdjustPaneSize { 'Up',    5 } },
-  { key = 'DownArrow',  mods = mod_ctrl, action = act.AdjustPaneSize { 'Down',  5 } },
+  -- ── Pane resizing — see mod_resize comment block at top of file ──────────
+  { key = 'LeftArrow',  mods = mod_resize, action = act.AdjustPaneSize { 'Left',  5 } },
+  { key = 'RightArrow', mods = mod_resize, action = act.AdjustPaneSize { 'Right', 5 } },
+  { key = 'UpArrow',    mods = mod_resize, action = act.AdjustPaneSize { 'Up',    5 } },
+  { key = 'DownArrow',  mods = mod_resize, action = act.AdjustPaneSize { 'Down',  5 } },
 
   -- ── Zoom current pane ─────────────────────────────────────────────────────
   { key = 'z', mods = mod_shift, action = act.TogglePaneZoomState },
@@ -381,9 +435,13 @@ config.keys = {
   { key = 'w', mods = mod, action = act.CloseCurrentPane { confirm = true } },
 
   -- ── Tabs ──────────────────────────────────────────────────────────────────
+  -- Linux uses WezTerm's built-in Ctrl+Tab / Ctrl+Shift+Tab for next/prev tab;
+  -- mod_shift+[ / ] is the iTerm convention on macOS only.
   { key = 't',          mods = mod,       action = act.SpawnTab 'CurrentPaneDomain' },
+{{- if eq .chezmoi.os "darwin" }}
   { key = ']',          mods = mod_shift, action = act.ActivateTabRelative(1)       },
   { key = '[',          mods = mod_shift, action = act.ActivateTabRelative(-1)      },
+{{- end }}
 
   -- Rename current tab
   {
@@ -413,7 +471,7 @@ config.keys = {
   -- ── Open this config in VS Code ───────────────────────────────────────────
   {
     key = ',', mods = mod,
-    action = act.SpawnCommandInNewTab { args = { 'code', wezterm.config_file } },
+    action = act.SpawnCommandInNewTab { args = { code_path, wezterm.config_file } },
   },
 
   -- ── Show shortcuts cheat sheet — q to dismiss ─────────────────────────────
@@ -435,6 +493,11 @@ config.keys = {
 
   -- ── Reload config ─────────────────────────────────────────────────────────
   { key = 'r', mods = mod_ctrl, action = act.ReloadConfiguration },
+
+  -- ── Shell input: Ctrl+Backspace → delete previous word ────────────────────
+  -- Forwards the chord as Ctrl+W so readline (bash/zsh) treats it as
+  -- unix-word-rubout. Matches the convention used by most other editors.
+  { key = 'Backspace', mods = 'CTRL', action = act.SendKey { key = 'w', mods = 'CTRL' } },
 }
 
 -- Jump to tab by number: primary mod + 1 through 9
@@ -451,8 +514,8 @@ end
 -- =============================================================================
 -- Key tables fully replace defaults when redefined, so the block below
 -- restates WezTerm's defaults and *adds* primary+G / primary+Shift+G for
--- Find Next / Find Previous (the convention Safari/Chrome/Finder use on
--- macOS, and equivalent SUPER bindings on Linux).
+-- Find Next / Find Previous (the Safari/Chrome/Finder convention on macOS,
+-- and the equivalent Ctrl+Shift+G chord on Linux).
 config.key_tables = {
   search_mode = {
     { key = 'Escape',    mods = 'NONE',  action = act.CopyMode 'Close' },
