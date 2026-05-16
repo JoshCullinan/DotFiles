@@ -39,7 +39,7 @@ config.color_scheme = 'Catppuccin Mocha'
 
 -- Derive the palette directly from WezTerm's built-in scheme so the UI
 -- colours always stay in sync — no hardcoded hex values that can drift.
-local scheme  = wezterm.get_builtin_color_schemes()['Banana Blueberry']
+local scheme  = wezterm.get_builtin_color_schemes()['Catppuccin Mocha']
 local c       = wezterm.color  -- colour manipulation helpers
 
 local palette = {
@@ -92,7 +92,11 @@ config.font = wezterm.font_with_fallback {
   { family = 'FiraCode Nerd Font',      weight = 'Regular' },
   'Menlo',
 }
-config.font_size   = 13.5
+-- font_size: Linux clips glyph descenders/ascenders at smaller sizes — the
+-- bitmap itself is rasterised clipped on this freetype/GPU pipeline, so
+-- cell-metric knobs (line_height, etc.) can't fix it. 14 is the smallest
+-- size that renders cleanly there. macOS is unaffected and stays at 13.5.
+config.font_size   = {{ if eq .chezmoi.os "linux" }}14{{ else }}13.5{{ end }}
 config.line_height = 1.2
 
 -- Ligatures — remove this block if you prefer no ligatures
