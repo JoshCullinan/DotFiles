@@ -1,0 +1,8 @@
+{{- /*
+  Linux-scoped Claude memory dir. The slug "-home-joshc" matches the project
+  path Claude uses on the Linux box (/home/joshc/...); on macOS, Claude reads
+  from a different slug, so these files would just be unused clutter here.
+*/ -}}
+{{ if ne .chezmoi.os "linux" }}
+.claude/projects/-home-joshc
+{{ end }}
